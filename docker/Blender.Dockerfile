@@ -1,5 +1,5 @@
 # Compiles a docker image for blender w/ "import bpy support"
-# 
+#
 # Compilation happens in two stages:
 # 1) Compiles blender from source.
 # 2) Installs previously built bpy module along with other dependencies in a fresh image.
@@ -10,7 +10,7 @@
 # Stage 1
 # #################################################################################################
 
-FROM ubuntu:20.04 as build
+FROM nvidia/cuda:11.4.1-devel-ubuntu20.04 as build
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LC_ALL C.UTF-8
@@ -59,6 +59,9 @@ RUN cd blender && \
 COPY ./docker/cycles_free_patch.txt /blenderpy/blender
 RUN cd blender && patch -p1 < /blenderpy/blender/cycles_free_patch.txt
 
+# enable CUDA
+COPY ./docker/enable_cuda_patch.txt /blenderpy/blender
+RUN cd blender && patch -p1 < /blenderpy/blender/enable_cuda_patch.txt
 
 RUN cd blender && make -j8 bpy
 
@@ -67,7 +70,7 @@ RUN cd blender && make -j8 bpy
 # #################################################################################################
 
 
-FROM ubuntu:20.04
+FROM nvidia/cuda:11.4.1-devel-ubuntu20.04
 
 LABEL Author="kubric-team <kubric@google.com>"
 LABEL Title="Blender"
@@ -119,6 +122,6 @@ RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
     python3.9 get-pip.py && \
     rm get-pip.py
 
-# install bpy module within python3.9 
+# install bpy module within python3.9
 COPY --from=build /blenderpy/build_linux_bpy/bin/bpy.so /usr/local/lib/python3.9/dist-packages/
 COPY --from=build /blenderpy/lib/linux_centos7_x86_64/python/lib/python3.9/site-packages/2.93 /usr/local/lib/python3.9/dist-packages/2.93

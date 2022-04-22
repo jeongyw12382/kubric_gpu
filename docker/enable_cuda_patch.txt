@@ -1,0 +1,8 @@
+--- a/build_files/cmake/config/bpy_module.cmake
++++ b/build_files/cmake/config/bpy_module.cmake
+@@ -44,3 +44,5 @@
+ if(WIN32)
+   set(WITH_WINDOWS_BUNDLE_CRT  OFF CACHE BOOL "" FORCE)
+ endif()
++
++set(WITH_CYCLES_CUDA_BINARIES   ON  CACHE BOOL "" FORCE)
