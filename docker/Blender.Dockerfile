@@ -10,7 +10,7 @@
 # Stage 1
 # #################################################################################################
 
-FROM nvidia/cuda:11.4.1-devel-ubuntu20.04 as build
+FROM nvidia/cuda:11.6.1-devel-ubuntu20.04 as build
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LC_ALL C.UTF-8
@@ -70,7 +70,7 @@ RUN cd blender && make -j8 bpy
 # #################################################################################################
 
 
-FROM nvidia/cuda:11.4.1-devel-ubuntu20.04
+FROM nvidia/cuda:11.6.1-devel-ubuntu20.04
 
 LABEL Author="kubric-team <kubric@google.com>"
 LABEL Title="Blender"
