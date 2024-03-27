@@ -28,6 +28,5 @@ RUN rm -f requirements_full.txt
 ENV TF_CPP_MIN_LOG_LEVEL="3"
 
 # --- Install Kubric
-COPY dist/kubric*.whl .
-RUN pip3 install `ls kubric*.whl`
-RUN rm -f kubric*.whl
+RUN git clone https://github.com/jeongyw12382/kubric_gpu.git
+RUN cd kubric_gpu && pip3 install -e .
