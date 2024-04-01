@@ -27,6 +27,3 @@ RUN rm -f requirements_full.txt
 # --- Silences tensorflow
 ENV TF_CPP_MIN_LOG_LEVEL="3"
 
-# --- Install Kubric
-RUN git clone https://github.com/jeongyw12382/kubric_gpu.git
-RUN cd kubric_gpu && pip3 install -e .
