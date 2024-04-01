@@ -52,8 +52,8 @@ parser.add_argument("--backgrounds_split", choices=["train", "test"],
 
 parser.add_argument("--camera", choices=["fixed_random", "linear_movement", "linear_movement_linear_lookat"],
                     default="fixed_random")
-parser.add_argument("--min_camera_movement", type=float, default=0.0)
-parser.add_argument("--max_camera_movement", type=float, default=4.0)
+parser.add_argument("--min_radius", type=float, default=15.0)
+parser.add_argument("--max_radius", type=float, default=20.0)
 parser.add_argument("--max_motion_blur", type=float, default=0.0)
 
 
@@ -112,75 +112,34 @@ texture_node = dome_blender.data.materials[0].node_tree.nodes["Image Texture"]
 texture_node.image = bpy.data.images.load(background_hdri.filename)
 
 
-
-def get_linear_camera_motion_start_end(
-    movement_speed: float,
-    inner_radius: float = 8.,
-    outer_radius: float = 12.,
-    z_offset: float = 0.1,
-):
-  """Sample a linear path which starts and ends within a half-sphere shell."""
-  while True:
-    camera_start = np.array(kb.sample_point_in_half_sphere_shell(inner_radius,
-                                                                 outer_radius,
-                                                                 z_offset))
-    direction = rng.rand(3) - 0.5
-    movement = direction / np.linalg.norm(direction) * movement_speed
-    camera_end = camera_start + movement
-    if (inner_radius <= np.linalg.norm(camera_end) <= outer_radius and
-        camera_end[2] > z_offset):
-      return camera_start, camera_end
-
-def get_linear_lookat_motion_start_end(
-    inner_radius: float = 1.0,
-    outer_radius: float = 4.0,
-):
-  """Sample a linear path which goes through the workspace center."""
-  while True:
-    # Sample a point near the workspace center that the path travels through
-    camera_through = np.array(
-        kb.sample_point_in_half_sphere_shell(0.0, inner_radius, 0.0)
-    )
-    while True:
-      # Sample one endpoint of the trajectory
-      camera_start = np.array(
-          kb.sample_point_in_half_sphere_shell(0.0, outer_radius, 0.0)
-      )
-      if camera_start[-1] < inner_radius:
-        break
-
-    # Continue the trajectory beyond the point in the workspace center, so the
-    # final path passes through that point.
-    continuation = rng.rand(1) * 0.5
-    camera_end = camera_through + continuation * (camera_through - camera_start)
-
-    # Second point will probably be closer to the workspace center than the
-    # first point.  Get extra augmentation by randomly swapping first and last.
-    if rng.rand(1)[0] < 0.5:
-      tmp = camera_start
-      camera_start = camera_end
-      camera_end = tmp
-    return camera_start, camera_end
-
-
 # Camera
 logging.info("Setting up the Camera...")
 scene.camera = kb.PerspectiveCamera(focal_length=35., sensor_width=32)
-camera_movement = rng.uniform(low=FLAGS.min_camera_movement, high=FLAGS.max_camera_movement)
-camera_start, camera_end = get_linear_camera_motion_start_end(
-    movement_speed=camera_movement
-)
-logging.info(f"Setting camera movement speed to {camera_movement}")
 
 # linearly interpolate the camera position between these two points
 # while keeping it focused on the center of the scene
 # we start one frame early and end one frame late to ensure that
 # forward and backward flow are still consistent for the last and first frames
+
+theta = rng.uniform(0, 2 * np.pi)
+phi = rng.uniform(np.deg2rad(30), np.deg2rad(60))
+radius = rng.uniform(FLAGS.min_radius**3, FLAGS.max_radius**3) ** (1/3.) 
+
+num_frames = FLAGS.frame_end - FLAGS.frame_start + 1
+
 for frame in range(FLAGS.frame_start - 1, FLAGS.frame_end + 2):
-  interp = ((frame - FLAGS.frame_start + 1) /
-            (FLAGS.frame_end - FLAGS.frame_start + 3))
-  scene.camera.position = (interp * np.array(camera_start) +
-                            (1 - interp) * np.array(camera_end))
+  
+  theta_curr = theta + (frame - FLAGS.frame_start + 1) * 2 * np.pi / num_frames
+  phi_curr = phi
+
+  xyz_curr = np.zeros(3)
+  xyz_curr[0] = np.cos(theta_curr) * np.sin(phi_curr)
+  xyz_curr[1] = np.sin(theta_curr) * np.sin(phi_curr)
+  xyz_curr[2] = np.cos(phi_curr)
+
+  xyz_curr = xyz_curr * radius
+
+  scene.camera.position = xyz_curr
   scene.camera.look_at((0, 0, 0))
   scene.camera.keyframe_insert("position", frame)
   scene.camera.keyframe_insert("quaternion", frame)
@@ -214,6 +173,8 @@ for i in range(num_static_objects):
   obj.restitution = 0.0
   obj.metadata["is_dynamic"] = False
   logging.info("    Added %s at %s", obj.asset_id, obj.position)
+  obj_blender = obj.linked_objects[renderer]
+  obj_blender.cycles_visibility.shadow = False
 
 
 logging.info("Running 100 frames of simulation to let static objects settle ...")
@@ -249,8 +210,9 @@ for i in range(num_dynamic_objects):
   obj.velocity = (rng.uniform(*VELOCITY_RANGE) -
                   [obj.position[0], obj.position[1], 0])
   obj.metadata["is_dynamic"] = True
-  logging.info("    Added %s at %s", obj.asset_id, obj.position)
-
+  obj_blender = obj.linked_objects[renderer]
+  obj_blender.cycles_visibility.shadow = False
+  logging.info("    Added %s at %s", obj.asset_id, obj.position)  
 
 
 if FLAGS.save_state:
@@ -317,8 +279,23 @@ eval_output_dir = output_dir.joinpath("test")
 scene.camera = kb.PerspectiveCamera(focal_length=35., sensor_width=32)
 
 for frame in range(FLAGS.frame_start - 1, FLAGS.frame_end + 2):
+  
+  theta_curr = rng.uniform(0, 2 * np.pi)
+  phi_curr = phi
+
+  xyz_curr = np.zeros(3)
+  xyz_curr[0] = np.cos(theta_curr) * np.sin(phi_curr)
+  xyz_curr[1] = np.sin(theta_curr) * np.sin(phi_curr)
+  xyz_curr[2] = np.cos(phi_curr)
+
+  scene.camera.position = xyz_curr * radius
+  scene.camera.look_at((0, 0, 0))
+  scene.camera.keyframe_insert("position", frame)
+  scene.camera.keyframe_insert("quaternion", frame)
+
+for frame in range(FLAGS.frame_start - 1, FLAGS.frame_end + 2):
   scene.camera.position = kb.sample_point_in_half_sphere_shell(
-      inner_radius=7., outer_radius=9., offset=0.1)
+      inner_radius=FLAGS.min_radius, outer_radius=FLAGS.max_radius, offset=0.1)
   scene.camera.look_at((0, 0, 0))
   scene.camera.keyframe_insert("position", frame)
   scene.camera.keyframe_insert("quaternion", frame)
