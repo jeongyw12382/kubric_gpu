@@ -293,13 +293,6 @@ for frame in range(FLAGS.frame_start - 1, FLAGS.frame_end + 2):
   scene.camera.keyframe_insert("position", frame)
   scene.camera.keyframe_insert("quaternion", frame)
 
-for frame in range(FLAGS.frame_start - 1, FLAGS.frame_end + 2):
-  scene.camera.position = kb.sample_point_in_half_sphere_shell(
-      inner_radius=FLAGS.min_radius, outer_radius=FLAGS.max_radius, offset=0.1)
-  scene.camera.look_at((0, 0, 0))
-  scene.camera.keyframe_insert("position", frame)
-  scene.camera.keyframe_insert("quaternion", frame)
-
 
 logging.info("Rendering the test scene ...")
 simulator.scratch_dir = scratch_test_dir
